@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Quiz Portal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter',sans-serif;-webkit-user-select:none;-ms-user-select:none;user-select:none;}
+.timer-progress{transition:width 1s linear;}
+.fade-in{animation:fadeIn .6s ease-in-out forwards;}
+.fade-out{animation:fadeOut .6s ease-in-out forwards;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fadeOut{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-20px);}}
+@keyframes blinkRed{0%,50%,100%{background-color:#f87171;}25%,75%{background-color:#fff;}}
+.blink{animation:blinkRed .6s infinite;}
+.result-highlight{display:inline-block;transition:transform .3s,color .3s;}
+.result-animate-green.animate{color:#22c55e;transform:scale(1.5);}
+.result-animate-red.animate{color:#ef4444;transform:scale(1.5);}
+.result-animate-blue.animate{color:#3b82f6;transform:scale(1.5);}
+.completion-success{color:#22c55e;font-weight:bold;}
+.completion-violation{color:#ef4444;font-weight:bold;}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300 flex items-center justify-center min-h-screen">
+
+<div id="main-container" class="w-full max-w-4xl mx-auto p-4 sm:p-6 md:p-8 relative">
+
+<!-- Start Screen -->
+<div id="start-screen" class="fade-in text-center bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg">
+    <h1 class="text-3xl font-bold mb-2">Online MCQ Assessment</h1>
+    <p class="text-slate-600 dark:text-slate-400 mb-6">Enter your team name to start the exam.</p>
+
+    <div class="bg-slate-50 dark:bg-slate-700 p-6 rounded-lg border border-slate-200 dark:border-slate-600 max-w-2xl mx-auto mb-6 text-left">
+        <h3 class="text-lg font-semibold mb-3">📜 Instructions:</h3>
+        <ul class="list-disc pl-6 space-y-2 text-sm">
+            <li>Each question has a <strong>30-second</strong> timer.</li>
+            <li>Do not refresh or close the browser during the exam.</li>
+            <li>Switching tabs counts as a violation.</li>
+            <li>After <strong>2 violations</strong>, the exam will be auto-submitted.</li>
+            <li>You cannot go back to previous questions once answered.</li>
+        </ul>
+    </div>
+
+    <div class="max-w-md mx-auto mb-6">
+        <input type="text" id="team-name" placeholder="Team Alpha" class="w-full p-2.5 border rounded-lg bg-slate-50 dark:bg-slate-700 dark:text-white" required>
+        <p id="validation-message" class="text-red-500 text-sm text-center hidden mt-2">Please enter your team name.</p>
+    </div>
+
+    <button id="start-exam-btn" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-all duration-500 shadow-md">Start Exam</button>
+</div>
+
+<!-- Exam Screen -->
+<div id="exam-screen" class="hidden fade-in bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg relative">
+    <div class="flex justify-between items-center mb-4">
+        <h2 id="question-number" class="text-xl font-bold">Question</h2>
+        <div class="flex items-center space-x-4">
+            <div class="text-sm font-semibold text-red-500">Violations: <span id="violation-count">0</span>/2</div>
+            <div class="text-sm font-semibold text-blue-600">Time Left: <span id="question-timer">30</span>s</div>
+        </div>
+    </div>
+
+    <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 mb-6">
+        <div id="timer-bar" class="bg-green-500 h-2.5 rounded-full timer-progress"></div>
+    </div>
+
+    <p id="question-text" class="text-lg font-semibold mb-6"></p>
+    <div id="options-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+</div>
+
+<!-- Result Screen -->
+<div id="result-screen" class="hidden fade-in text-center bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg">
+    <h1 class="text-3xl font-bold mb-4">Assessment Complete</h1>
+    <p class="text-slate-600 mb-2">Team: <span id="team-name-result" class="result-highlight"></span></p>
+    <p class="text-slate-600 mb-2">Total Time Taken: <span id="total-time-taken" class="result-highlight result-animate-blue">0</span> seconds</p>
+    <p class="text-slate-600 mb-4">Violations: <span id="violation-count-result" class="result-highlight result-animate-red">0</span></p>
+    <p class="text-lg font-semibold mb-6" id="completion-status"></p>
+
+    <div class="bg-slate-50 dark:bg-slate-700 p-8 rounded-lg border border-slate-200 dark:border-slate-600 inline-block">
+        <p class="text-lg">Score:</p>
+        <p class="text-5xl font-bold my-2">
+            <span id="score" class="result-highlight result-animate-green">0</span> / <span id="total-questions">0</span>
+        </p>
+    </div>
+</div>
+
+</div>
+
+<script>
+// ✅ 25 Questions from PDF
+const quizData = [
+{question:`What is the output?<br><pre>#include &lt;stdio.h&gt;\nint main(){int a=5,b=2;printf("%d",a%b);}</pre>`,options:["2","1","0","Error"],answer:"1"},
+{question:"Which of the following is a valid identifier in C?",options:["123var","int","@value","var_123"],answer:"var_123"},
+{question:"What is the size of int (commonly on 32-bit systems)?",options:["2 bytes","4 bytes","8 bytes","16 bytes"],answer:"4 bytes"},
+{question:"Format specifier for long int:",options:["%d","%ld","%f","%Lf"],answer:"%ld"},
+{question:"Which of these is not a valid keyword?",options:["auto","struct","typedef","include"],answer:"include"},
+{question:`Output?<br><pre>#include &lt;stdio.h&gt;\nint main(){printf("%d",sizeof(3.14));}</pre>`,options:["4","8","2","3"],answer:"4"},
+{question:"Which of the following is not a valid format specifier?",options:["%d","%c","%z","%f"],answer:"%z"},
+{question:`Python Output?<br><pre>x = 10\nprint(x/3)</pre>`,options:["3","3.333...","3.0","1"],answer:"3.333..."},
+{question:`Python Output?<br><pre>s = "Python"\nprint(s[2:2])</pre>`,options:["Py","thon","Nothing","Error"],answer:"Nothing"},
+{question:"What is the default value of a global variable in C?",options:["A garbage value","NULL","0","10"],answer:"0"},
+{question:"In OOP, which type of method initializes objects automatically?",options:["Destructor","Constructor","Accessor","Mutator"],answer:"Constructor"},
+{question:"Which of the following is an example of Artificial Intelligence used in daily life?",options:["Microsoft Word typing","Google Maps navigation","Notepad text editor","Calculator addition"],answer:"Google Maps navigation"},
+{question:"A Goal-based agent chooses actions by:",options:["Ignoring goals","Comparing percepts to goals","Randomly selecting actions","Memorizing previous states only"],answer:"Comparing percepts to goals"},
+{question:"A Simple Reflex Agent makes decisions based on:",options:["Current percept only","History of all percepts","Future goals","Utility values"],answer:"Current percept only"},
+{question:"Which of the following is not a type of Machine Learning technique?",options:["Sequential Learning","Unsupervised Learning","Reinforcement Learning","Supervised Learning"],answer:"Sequential Learning"},
+{question:`Output of C code?<br><pre>#include &lt;stdio.h&gt;\nint main(){int x=5;if(x>3){printf("A");}else if(x>5){printf("B");}else{printf("C");}return 0;}</pre>`,options:["A","B","C","D"],answer:"A"},
+{question:"Which of the following statements about C is false?",options:["C is a compiled language.","C supports object-oriented programming.","C is a procedural language.","C is a low-level language that supports pointers."],answer:"C is a procedural language."},
+{question:"Correct way to declare a pointer to an array of 5 integers?",options:["int *p[5];","int (*p)[5];","int *p = new int[5];","int (*p)[5];"],answer:"int (*p)[5];"},
+{question:`Output?<br><pre>#include &lt;stdio.h&gt;\nint main(){int x=10,y=5;printf("%d",x==10 && y>5);return 0;}</pre>`,options:["0","1","True","Error"],answer:"0"},
+{question:"Which of the following is an example of an unqualified pointer in C?",options:["const int *p","int *const p","int *p","int *p"],answer:"int *p"},
+{question:"Purpose of fseek()?",options:["To read a file character by character.","To write data to a file.","To move the file pointer to a specific position in a file.","To set the file position indicator for a stream."],answer:"To set the file position indicator for a stream."},
+{question:`Python Output?<br><pre>x=[1,2,3]\ny=x\ny.append(4)\nprint(x)</pre>`,options:["[1,2,3]","{1,2,3,4}","[4]","[1,2,3,4]"],answer:"[1,2,3,4]"},
+{question:"Which of the following is an immutable data type in Python?",options:["list","dict","tuple","Set"],answer:"tuple"},
+{question:"Which of the following is a key feature of Python's object-oriented programming?",options:["Pointers","Method overriding","Method overloading","Encapsulation, inheritance, and polymorphism"],answer:"Encapsulation, inheritance, and polymorphism"},
+{question:`Python Output?<br><pre>x=10\nif x>5 and x<15:\n    print("True")\nelse:\n    print("False")</pre>`,options:["False","True","Error","0"],answer:"True"}
+];
+
+const startScreen=document.getElementById('start-screen');
+const examScreen=document.getElementById('exam-screen');
+const resultScreen=document.getElementById('result-screen');
+const startExamBtn=document.getElementById('start-exam-btn');
+const questionNumberEl=document.getElementById('question-number');
+const questionTextEl=document.getElementById('question-text');
+const optionsContainerEl=document.getElementById('options-container');
+const timerBarEl=document.getElementById('timer-bar');
+const questionTimerEl=document.getElementById('question-timer');
+const violationCountEl=document.getElementById('violation-count');
+const scoreEl=document.getElementById('score');
+const totalQuestionsEl=document.getElementById('total-questions');
+const teamNameInput=document.getElementById('team-name');
+const validationMessageEl=document.getElementById('validation-message');
+const teamNameResultEl=document.getElementById('team-name-result');
+const violationCountResultEl=document.getElementById('violation-count-result');
+const totalTimeTakenEl=document.getElementById('total-time-taken');
+const completionStatusEl=document.getElementById('completion-status');
+
+let currentQuestionIndex=0,score=0,timer,timeLeft=30,violationCount=0;
+const MAX_VIOLATIONS=2;
+let teamName='',startTime,endTime;
+
+function startExam(){
+    const name=teamNameInput.value.trim();
+    if(!name){validationMessageEl.classList.remove('hidden');return;}
+    validationMessageEl.classList.add('hidden');
+    teamName=name;startTime=Date.now();
+    startScreen.classList.add('fade-out');
+    setTimeout(()=>{
+        startScreen.classList.add('hidden');
+        examScreen.classList.remove('hidden');
+        examScreen.classList.add('fade-in');
+        loadQuestion();setupSecurity();
+    },600);
+}
+function loadQuestion(){
+    resetTimer();
+    if(currentQuestionIndex<quizData.length){
+        const q=quizData[currentQuestionIndex];
+        questionNumberEl.textContent=`Question ${currentQuestionIndex+1}/${quizData.length}`;
+        questionTextEl.innerHTML=q.question;
+        optionsContainerEl.innerHTML='';
+        q.options.forEach(opt=>{
+            const btn=document.createElement('button');
+            btn.textContent=opt;
+            btn.className='w-full p-4 border rounded-lg text-left transition-colors hover:bg-blue-100 dark:hover:bg-slate-700';
+            btn.onclick=()=>selectAnswer(opt,btn);
+            optionsContainerEl.appendChild(btn);
+        });
+        startTimer();
+    } else { endExam(); }
+}
+function selectAnswer(selected,btn){
+    clearInterval(timer);
+    const correct=quizData[currentQuestionIndex].answer;
+    const allBtns=optionsContainerEl.querySelectorAll('button');
+    allBtns.forEach(b=>b.disabled=true);
+    if(selected===correct){score++;btn.classList.add('bg-green-200','dark:bg-green-900/50');}
+    else btn.classList.add('bg-red-200','dark:bg-red-900/50');
+    setTimeout(()=>{currentQuestionIndex++;loadQuestion();},1200);
+}
+function startTimer(){
+    timeLeft=30;questionTimerEl.textContent=timeLeft;updateTimerBar();
+    timer=setInterval(()=>{
+        timeLeft--;questionTimerEl.textContent=timeLeft;updateTimerBar();
+        if(timeLeft<=0){clearInterval(timer);setTimeout(()=>{currentQuestionIndex++;loadQuestion();},500);}
+    },1000);
+}
+function resetTimer(){clearInterval(timer);timeLeft=30;questionTimerEl.textContent=timeLeft;updateTimerBar();}
+function updateTimerBar(){
+    const pct=(timeLeft/30)*100;
+    timerBarEl.style.width=pct+'%';
+    timerBarEl.classList.remove('bg-green-500','bg-yellow-500','bg-red-500','blink');
+    questionTimerEl.classList.remove('blink');
+    if(pct>60)timerBarEl.classList.add('bg-green-500');
+    else if(pct>30)timerBarEl.classList.add('bg-yellow-500');
+    else timerBarEl.classList.add('bg-red-500');
+    if(timeLeft<=5){timerBarEl.classList.add('blink');questionTimerEl.classList.add('blink');}
+}
+function animateValue(element,finalValue,duration=1000){
+    let start=0;const increment=finalValue/(duration/20);
+    element.classList.add('animate');
+    const counter=setInterval(()=>{
+        start+=increment;
+        if(start>=finalValue){start=finalValue;clearInterval(counter);}
+        element.textContent=Math.round(start);
+    },20);
+    setTimeout(()=>element.classList.remove('animate'),duration);
+}
+function endExam(reason="Exam completed."){
+    clearInterval(timer);
+    endTime=Date.now();
+    const totalTime=Math.round((endTime-startTime)/1000);
+    examScreen.classList.add('fade-out');
+    setTimeout(()=>{
+        examScreen.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+        resultScreen.classList.add('fade-in');
+        teamNameResultEl.textContent=teamName;
+        animateValue(scoreEl,score,1000);
+        totalQuestionsEl.textContent=quizData.length;
+        animateValue(violationCountResultEl,violationCount,1000);
+        animateValue(totalTimeTakenEl,totalTime,1000);
+        if(violationCount>=MAX_VIOLATIONS){
+            completionStatusEl.textContent="Quiz auto-submitted due to violations!";
+            completionStatusEl.classList.add('completion-violation');
+        } else {
+            completionStatusEl.textContent="Quiz completed successfully!";
+            completionStatusEl.classList.add('completion-success');
+        }
+    },600);
+}
+function setupSecurity(){
+    document.addEventListener('visibilitychange',()=>{
+        if(document.hidden){
+            violationCount++;
+            violationCountEl.textContent=violationCount;
+            if(violationCount>=MAX_VIOLATIONS) endExam("Auto-submitted due to violations.");
+            else alert(`Warning! Violation ${violationCount}/${MAX_VIOLATIONS}`);
+        }
+    });
+    window.addEventListener('beforeunload',e=>{
+        endExam("Exam submitted due to window close.");
+        e.preventDefault();e.returnValue='';
+    });
+    document.addEventListener('contextmenu',e=>e.preventDefault());
+    document.addEventListener('copy',e=>e.preventDefault());
+}
+startExamBtn.addEventListener('click',startExam);
+</script>
+</body>
+</html>
